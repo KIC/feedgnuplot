@@ -31,6 +31,7 @@ complete -W               \
     --maxcurves           \
     --monotonic           \
     --points              \
+    --port                \
     --square              \
     --square_xy           \
     --stream              \

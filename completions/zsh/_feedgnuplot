@@ -8,6 +8,7 @@ _arguments -S                                                                   
     '--stream[Plot the data in realtime]::period in s:'                           \
     '--lines'                                                                     \
     '--points'                                                                    \
+    '--port'                                                                      \
     '--circles'                                                                   \
     '--xlabel:X-axis label:'                                                      \
     '--ylabel:Y-axis label:'                                                      \

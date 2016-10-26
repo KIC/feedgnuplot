@@ -13,6 +13,7 @@ use Scalar::Util qw( looks_like_number );
 use Text::ParseWords; # for shellwords
 use Pod::Usage;
 use Time::Piece;
+use IO::Socket::INET;
 
 my $VERSION = 1.39;
 
@@ -47,8 +48,7 @@ my $this_replot_is_from_timer;
 my $stdin    = IO::Handle->new();
 die "Couldn't open STDIN" unless $stdin->fdopen(fileno(STDIN),"r");
 my $selector = IO::Select->new( $stdin );
-
-
+my $socket = 0;
 
 mainThread();
 
@@ -94,6 +94,7 @@ sub interpretCommandline
   $options{curvestyleall} = '';
   $options{styleall}      = '';
   $options{with}          = '';
+  $options{port}          = -1;
 
   $options{rangesize} = [];
 
@@ -107,6 +108,7 @@ sub interpretCommandline
              'histogram=s@', 'binwidth=f', 'histstyle=s',
              'terminal=s',
              'rangesize=s{2}', 'rangesizeall=i', 'extraValuesPerPoint=i',
+             'port=i',
              'help', 'dump', 'exit', 'version',
              'geometry=s') or pod2usage( -exitval => 1,
                                          -verbose => 1, # synopsis and args
@@ -255,7 +257,13 @@ sub interpretCommandline
     }
   }
 
-  if ($options{colormap})
+  if( $options{port} >0 && !$options{stream})
+  {
+      print STDERR "you need to provide --stream together with --port";
+      exit -1;
+  }
+
+    if ($options{colormap})
   {
     # colormap styles all curves with palette. Seems like there should be a way to do this with a
     # global setting, but I can't get that to work
@@ -439,26 +447,43 @@ sub getNextLine
         return $stdin->getline()
           if (! $options{stream} || $options{stream} < 0);
 
-
-        my $now = [gettimeofday];
+        # seems that we are streaming
+        my $now = [ gettimeofday ];
         my $time_remaining = $options{stream} - tv_interval($prev_timed_replot_time, $now);
 
-        if ( $time_remaining < 0 )
+        if ($time_remaining < 0)
         {
             $prev_timed_replot_time = $now;
             $this_replot_is_from_timer = 1;
             return 'replot';
         }
 
-        if ($selector->can_read($time_remaining))
+        if ($selector->can_read( $time_remaining ))
         {
-            return $stdin->getline();
+            #lets see if we have a socket
+            if ($socket)
+            {
+                return <$socket>;
+            } else {
+                return $stdin->getline();
+            }
         }
     }
 }
 
 sub mainThread
 {
+    if ($options{port} > 0) {
+        $socket = IO::Socket::INET->new(
+            Listen    => 1,
+            LocalAddr => '0.0.0.0',
+            LocalPort => $options{port},
+            Proto     => 'tcp') || die "cannot create socket $!\n";
+
+        $socket = $socket->accept();
+        $selector = IO::Select->new($socket);
+    }
+
     local *PIPE;
     my $dopersist = '';
 
@@ -1024,7 +1049,7 @@ sub pushPoint
 
 =head1 NAME
 
-feedgnuplot - General purpose pipe-oriented plotting tool
+fork of dkogan/feedgnuplot - General purpose pipe-oriented plotting tool. Added a --port switch to enable streaming plots over tcp.
 
 =head1 SYNOPSIS
 
